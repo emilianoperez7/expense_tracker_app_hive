@@ -1,3 +1,4 @@
+import 'package:expense_tracker_app_hive/bar%20graph/bar_graph.dart';
 import 'package:expense_tracker_app_hive/components/my_list_tile.dart';
 import 'package:expense_tracker_app_hive/database/expense_database.dart';
 import 'package:expense_tracker_app_hive/helper/helper_functions.dart';
@@ -14,100 +15,93 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  //text controller
   TextEditingController nameController = TextEditingController();
   TextEditingController amountController = TextEditingController();
 
+  Future<Map<String, double>>? _monthlyTotalsFuture;
+  Future<double>? _calculateCurrentMonthTotal;
+
   @override
   void initState() {
-    Provider.of<ExpenseDatabase>(context, listen: false).readExpenses();
     super.initState();
+    // Solo refrescar data, ya que readExpenses no tiene uso en Hive
+    refreshData();
   }
 
-  //new expensebox
+  void refreshData() {
+    _monthlyTotalsFuture = Provider.of<ExpenseDatabase>(context, listen: false)
+        .calculateMonthlyExpenses();
+    _calculateCurrentMonthTotal =
+        Provider.of<ExpenseDatabase>(context, listen: false)
+            .calculateCurrentMonthTotal();
+  }
+
   void openNewExpenseBox() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("New Expense"),
+        title: const Text("New Expense"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            //input expense name
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(
-                hintText: "Name",
-              ),
+              decoration: const InputDecoration(hintText: "Name"),
             ),
-            //input expense amount
             TextField(
               controller: amountController,
-              decoration: const InputDecoration(
-                hintText: "Amount",
-              ),
+              decoration: const InputDecoration(hintText: "Amount"),
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+              ],
             ),
           ],
         ),
         actions: [
-          //cancel button
           _cancelButton(),
-          //save button
-          _createNewExpenseButton()
+          _createNewExpenseButton(),
         ],
       ),
     );
   }
 
-  // open edit box
   void openEditBox(Expense expense) {
-    //pre-fill existing values into the text fields
-    String existingName = expense.name;
-    String existingAmount = expense.amount.toString();
+    nameController.text = expense.name;
+    amountController.text = expense.amount.toString();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("New Expense"),
+        title: const Text("Edit Expense"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            //input expense name
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(
-                hintText: existingName,
-              ),
-            ),
-            //input expense amount
+            TextField(controller: nameController),
             TextField(
               controller: amountController,
-              decoration: InputDecoration(
-                hintText: existingAmount,
-              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+              ],
             ),
           ],
         ),
         actions: [
-          //cancel button
           _cancelButton(),
-          //save button
           _editExpenseButton(expense),
         ],
       ),
     );
   }
 
-  // open delete box
   void openDeleteBox(Expense expense) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("New Expense"),
+        title: const Text("Delete Expense"),
         actions: [
-          //cancel button
           _cancelButton(),
-          //save button
           _deleteExpenseButton(expense.id),
         ],
       ),
@@ -117,70 +111,127 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Consumer<ExpenseDatabase>(
-      builder: (context, value, child) => Scaffold(
+      builder: (context, value, child) {
+        int startMonth = value.getStartMonth();
+        int startYear = value.getStartYear();
+        int currentMonth = DateTime.now().month;
+        int currentYear = DateTime.now().year;
+        int monthCount = calculateMonthCount(
+            startYear, startMonth, currentYear, currentMonth);
+
+        List<Expense> allExpenses = value.getAllExpenses();
+        List<Expense> currentMonthExpenses = allExpenses
+            .where((expense) =>
+                expense.date.year == currentYear &&
+                expense.date.month == currentMonth)
+            .toList();
+
+        return Scaffold(
+          backgroundColor: Colors.grey.shade300,
           floatingActionButton: FloatingActionButton(
             onPressed: openNewExpenseBox,
             child: const Icon(Icons.add),
           ),
-          body: Column(
-            children: [
-              //GRAPH UI
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            title: FutureBuilder<double>(
+              future: _calculateCurrentMonthTotal,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done) {
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('\$${snapshot.data!.toStringAsFixed(2)}'),
+                      Text(getCurrentMonthName()),
+                    ],
+                  );
+                } else {
+                  return const Text('Loading...');
+                }
+              },
+            ),
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 250,
+                  child: FutureBuilder(
+                    future: _monthlyTotalsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.done) {
+                        Map<String, double> monthlyTotals = snapshot.data ?? {};
+                        List<double> monthlySummary =
+                            List.generate(monthCount, (index) {
+                          int year = startYear + (startMonth + index - 1) ~/ 12;
+                          int month = (startMonth + index - 1) % 12 + 1;
+                          String yearMonthKey = '$year-$month';
+                          return monthlyTotals[yearMonthKey] ?? 0.0;
+                        });
 
-              //EXPENSE LIST UI
-              Expanded(
-                child: ListView.builder(
-                  itemCount: value.expenses.length,
-                  itemBuilder: (context, index) {
-                    Expense expense = value.expenses[index];
-                    return MyListTile(
-                      title: expense.name,
-                      trailing: expense.amount.toString(),
-                      onEditPressed: (context) {
-                        openEditBox(expense);
-                      },
-                      onDeletePressed: (context) {
-                        openDeleteBox(expense);
-                      },
-                    );
-                  },
+                        return MyBarGraph(
+                            monthlySummary: monthlySummary,
+                            startMonth: startMonth);
+                      } else {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  ),
                 ),
-              ),
-            ],
-          )),
+                const SizedBox(height: 25),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: currentMonthExpenses.length,
+                    itemBuilder: (context, index) {
+                      int reversedIndex =
+                          currentMonthExpenses.length - 1 - index;
+                      Expense individualExpense =
+                          currentMonthExpenses[reversedIndex];
+
+                      return MyListTile(
+                        title: individualExpense.name,
+                        trailing: formatAmount(individualExpense.amount),
+                        onEditPressed: (context) =>
+                            openEditBox(individualExpense),
+                        onDeletePressed: (context) =>
+                            openDeleteBox(individualExpense),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  //cancel button method
   Widget _cancelButton() {
-    return MaterialButton(
-        onPressed: () {
-          //pop box
-          Navigator.pop(context);
-          //clear controllers
-          nameController.clear();
-          amountController.clear();
-        },
-        child: const Text('Cancel'));
+    return TextButton(
+      onPressed: () {
+        Navigator.pop(context);
+        nameController.clear();
+        amountController.clear();
+      },
+      child: const Text('Cancel'),
+    );
   }
 
-  //save button method (Create a new Expense)
   Widget _createNewExpenseButton() {
-    return MaterialButton(
+    return TextButton(
       onPressed: () async {
-        //only save if the fields are not empty
         if (nameController.text.isNotEmpty &&
             amountController.text.isNotEmpty) {
-          //pop box
           Navigator.pop(context);
-          //create new expense
-          Expense newExpense = Expense(
+          final expense = Expense(
+            id: DateTime.now().millisecondsSinceEpoch,
             name: nameController.text,
             amount: convertStringtoDouble(amountController.text),
             date: DateTime.now(),
           );
-          //save to db
-          await context.read<ExpenseDatabase>().createNewExpense(newExpense);
-          //clear all controllers
+          await context.read<ExpenseDatabase>().addExpense(expense);
+          refreshData();
           nameController.clear();
           amountController.clear();
         }
@@ -189,48 +240,37 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  //save button method (Edit an Expense)
   Widget _editExpenseButton(Expense expense) {
-    return MaterialButton(
+    return TextButton(
       onPressed: () async {
-        //only save if the fields are not empty
-        if (nameController.text.isNotEmpty ||
-            amountController.text.isNotEmpty) {
-          //pop box
-          Navigator.pop(context);
-          //create new updated expense
-          Expense updatedExpense = Expense(
-            name: nameController.text.isNotEmpty
-                ? nameController.text
-                : expense.name,
-            amount: amountController.text.isNotEmpty
-                ? convertStringtoDouble(amountController.text)
-                : expense.amount,
-            date: DateTime.now(),
-          );
-
-          //save to db
-          //old expense id
-          int existingid = expense.id;
-          //update expense
-          await context
-              .read<ExpenseDatabase>()
-              .updateExpense(existingid, updatedExpense);
-        }
+        Navigator.pop(context);
+        final updatedExpense = Expense(
+          id: expense.id,
+          name: nameController.text.isNotEmpty
+              ? nameController.text
+              : expense.name,
+          amount: amountController.text.isNotEmpty
+              ? convertStringtoDouble(amountController.text)
+              : expense.amount,
+          date: DateTime.now(),
+        );
+        await context
+            .read<ExpenseDatabase>()
+            .updateExpense(expense.id, updatedExpense);
+        refreshData();
       },
       child: const Text('Save'),
     );
   }
 
-  //save button method (Delete an Expense)
   Widget _deleteExpenseButton(int id) {
-    return MaterialButton(
-        onPressed: () async {
-          // pop box
-          Navigator.pop(context);
-          // delete expense from db
-          await context.read<ExpenseDatabase>().deleteExpense(id);
-        },
-        child: const Text('Delete'));
+    return TextButton(
+      onPressed: () async {
+        Navigator.pop(context);
+        await context.read<ExpenseDatabase>().deleteExpense(id);
+        refreshData();
+      },
+      child: const Text('Delete'),
+    );
   }
 }

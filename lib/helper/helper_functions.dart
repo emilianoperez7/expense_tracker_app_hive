@@ -17,3 +17,30 @@ String formatAmount(double amount) {
   );
   return format.format(amount); // Retorna el monto formateado
 }
+
+//calculate the number of months since the first month
+int calculateMonthCount(int startYear, startMonth, currentYear, currentMonth) {
+  int monthCount =
+      (currentYear - startYear) * 12 + currentMonth - startMonth + 1;
+  return monthCount;
+}
+
+//get the current month name
+String getCurrentMonthName() {
+  DateTime now = DateTime.now();
+  List<String> months = [
+    'ENE',
+    'FEB',
+    'MAR',
+    'ABR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AGO',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DIC'
+  ];
+  return months[now.month - 1];
+}
