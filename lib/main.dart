@@ -1,5 +1,6 @@
 import 'package:expense_tracker_app_hive/database/expense_database.dart';
 import 'package:expense_tracker_app_hive/models/expense.dart';
+import 'package:expense_tracker_app_hive/models/settings.dart';
 import 'package:expense_tracker_app_hive/pages/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -11,9 +12,11 @@ void main() async {
 
   // Inicializa Hive y abre la caja de Expense
   await Hive.initFlutter();
+  Hive.registerAdapter(ExpenseAdapter());
   Hive.registerAdapter(
-      ExpenseAdapter()); // Registra el adaptador para la clase Expense
-  await Hive.openBox<Expense>('expenses'); // Abre la caja
+      SettingsAdapter()); // Registra el adaptador para la clase Expense
+  await Hive.openBox<Expense>('expenses');
+  await Hive.openBox<Settings>('settings');
 
   runApp(MyApp());
 }
@@ -28,6 +31,7 @@ class MyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
         title: 'Expense Tracker',
         theme: ThemeData(
           primarySwatch: Colors.blue,

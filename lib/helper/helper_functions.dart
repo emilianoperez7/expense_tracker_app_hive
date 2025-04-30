@@ -44,3 +44,8 @@ String getCurrentMonthName() {
   ];
   return months[now.month - 1];
 }
+
+int getCurrentYear() {
+  DateTime now = DateTime.now();
+  return now.year;
+}

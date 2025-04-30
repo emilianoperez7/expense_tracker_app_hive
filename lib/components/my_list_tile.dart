@@ -26,7 +26,7 @@ class MyListTile extends StatelessWidget {
             // Edit option
             SlidableAction(
               onPressed: onEditPressed,
-              icon: Icons.settings,
+              icon: Icons.edit,
               backgroundColor: Colors.grey.shade700,
               foregroundColor: Colors.white,
               borderRadius: BorderRadius.circular(4),

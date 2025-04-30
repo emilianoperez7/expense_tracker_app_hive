@@ -21,36 +21,39 @@ class _HomePageState extends State<HomePage> {
   Future<Map<String, double>>? _monthlyTotalsFuture;
   Future<double>? _calculateCurrentMonthTotal;
 
+  int selectedMonthIndex = DateTime.now().month - 1;
+
   @override
   void initState() {
     super.initState();
-    // Solo refrescar data, ya que readExpenses no tiene uso en Hive
     refreshData();
   }
 
-  void refreshData() {
-    _monthlyTotalsFuture = Provider.of<ExpenseDatabase>(context, listen: false)
-        .calculateMonthlyExpenses();
-    _calculateCurrentMonthTotal =
-        Provider.of<ExpenseDatabase>(context, listen: false)
-            .calculateCurrentMonthTotal();
+  void refreshData() async {
+    final db = Provider.of<ExpenseDatabase>(context, listen: false);
+    while (!db.isInitialized) {
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+    setState(() {
+      _monthlyTotalsFuture = db.calculateMonthlyExpenses();
+      _calculateCurrentMonthTotal = db.calculateCurrentMonthTotal();
+    });
   }
 
   void openNewExpenseBox() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("New Expense"),
+        title: const Text("Nuevo Gasto"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: nameController,
-              decoration: const InputDecoration(hintText: "Name"),
-            ),
+                controller: nameController,
+                decoration: const InputDecoration(hintText: "Nombre")),
             TextField(
               controller: amountController,
-              decoration: const InputDecoration(hintText: "Amount"),
+              decoration: const InputDecoration(hintText: "Monto"),
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
@@ -73,7 +76,7 @@ class _HomePageState extends State<HomePage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Edit Expense"),
+        title: const Text("Editar Gasto"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -99,10 +102,11 @@ class _HomePageState extends State<HomePage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Delete Expense"),
+        title: const Text("Borrar Gasto"),
+        content: Text("¿Estás seguro de borrar: ${expense.name}?"),
         actions: [
           _cancelButton(),
-          _deleteExpenseButton(expense.id),
+          _deleteExpenseButton(expense),
         ],
       ),
     );
@@ -119,12 +123,10 @@ class _HomePageState extends State<HomePage> {
         int monthCount = calculateMonthCount(
             startYear, startMonth, currentYear, currentMonth);
 
-        List<Expense> allExpenses = value.getAllExpenses();
-        List<Expense> currentMonthExpenses = allExpenses
-            .where((expense) =>
-                expense.date.year == currentYear &&
-                expense.date.month == currentMonth)
-            .toList();
+        List<Expense> selectedMonthExpenses =
+            value.getAllExpenses().where((expense) {
+          return expense.date.month - 1 == selectedMonthIndex;
+        }).toList();
 
         return Scaffold(
           backgroundColor: Colors.grey.shade300,
@@ -134,19 +136,22 @@ class _HomePageState extends State<HomePage> {
           ),
           appBar: AppBar(
             backgroundColor: Colors.transparent,
+            elevation: 0,
             title: FutureBuilder<double>(
               future: _calculateCurrentMonthTotal,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.done) {
+                  String currentMonth = (getCurrentMonthName());
+                  String currentYear = (getCurrentYear().toString());
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('\$${snapshot.data!.toStringAsFixed(2)}'),
-                      Text(getCurrentMonthName()),
+                      Text('\$${snapshot.data?.toStringAsFixed(2) ?? "0.00"}'),
+                      Text("$currentMonth $currentYear"),
                     ],
                   );
                 } else {
-                  return const Text('Loading...');
+                  return const Text('Cargando...');
                 }
               },
             ),
@@ -155,7 +160,7 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               children: [
                 SizedBox(
-                  height: 250,
+                  height: 220,
                   child: FutureBuilder(
                     future: _monthlyTotalsFuture,
                     builder: (context, snapshot) {
@@ -165,13 +170,21 @@ class _HomePageState extends State<HomePage> {
                             List.generate(monthCount, (index) {
                           int year = startYear + (startMonth + index - 1) ~/ 12;
                           int month = (startMonth + index - 1) % 12 + 1;
-                          String yearMonthKey = '$year-$month';
+                          String yearMonthKey = '$year-${month.toString()}';
                           return monthlyTotals[yearMonthKey] ?? 0.0;
                         });
 
                         return MyBarGraph(
-                            monthlySummary: monthlySummary,
-                            startMonth: startMonth);
+                          monthlySummary: monthlySummary,
+                          startMonth: startMonth,
+                          startYear: startYear,
+                          onBarTap: (index) {
+                            setState(() {
+                              selectedMonthIndex =
+                                  (startMonth + index - 1) % 12;
+                            });
+                          },
+                        );
                       } else {
                         return const Center(child: CircularProgressIndicator());
                       }
@@ -181,13 +194,12 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 25),
                 Expanded(
                   child: ListView.builder(
-                    itemCount: currentMonthExpenses.length,
+                    itemCount: selectedMonthExpenses.length,
                     itemBuilder: (context, index) {
                       int reversedIndex =
-                          currentMonthExpenses.length - 1 - index;
+                          selectedMonthExpenses.length - 1 - index;
                       Expense individualExpense =
-                          currentMonthExpenses[reversedIndex];
-
+                          selectedMonthExpenses[reversedIndex];
                       return MyListTile(
                         title: individualExpense.name,
                         trailing: formatAmount(individualExpense.amount),
@@ -214,7 +226,7 @@ class _HomePageState extends State<HomePage> {
         nameController.clear();
         amountController.clear();
       },
-      child: const Text('Cancel'),
+      child: const Text('Cancelar'),
     );
   }
 
@@ -236,7 +248,7 @@ class _HomePageState extends State<HomePage> {
           amountController.clear();
         }
       },
-      child: const Text('Save'),
+      child: const Text('Guardar'),
     );
   }
 
@@ -252,25 +264,27 @@ class _HomePageState extends State<HomePage> {
           amount: amountController.text.isNotEmpty
               ? convertStringtoDouble(amountController.text)
               : expense.amount,
-          date: DateTime.now(),
+          date: expense.date,
         );
         await context
             .read<ExpenseDatabase>()
             .updateExpense(expense.id, updatedExpense);
         refreshData();
+        nameController.clear();
+        amountController.clear();
       },
-      child: const Text('Save'),
+      child: const Text('Guardar'),
     );
   }
 
-  Widget _deleteExpenseButton(int id) {
+  Widget _deleteExpenseButton(Expense expense) {
     return TextButton(
       onPressed: () async {
         Navigator.pop(context);
-        await context.read<ExpenseDatabase>().deleteExpense(id);
+        await context.read<ExpenseDatabase>().deleteExpense(expense.id);
         refreshData();
       },
-      child: const Text('Delete'),
+      child: const Text('Borrar', style: TextStyle(color: Colors.red)),
     );
   }
 }
