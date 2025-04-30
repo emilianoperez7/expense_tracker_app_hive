@@ -40,6 +40,8 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  DateTime selectedDate = DateTime.now();
+
   void openNewExpenseBox() {
     showDialog(
       context: context,
@@ -57,6 +59,32 @@ class _HomePageState extends State<HomePage> {
               keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Fecha: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(1980),
+                      lastDate: DateTime.now(),
+                    );
+                    if (pickedDate != null) {
+                      setState(() => selectedDate = pickedDate);
+                      Navigator.pop(
+                          context); // cerrar y volver a abrir el diálogo
+                      openNewExpenseBox(); // con fecha actualizada
+                    }
+                  },
+                  child: const Text("Elegir Fecha"),
+                ),
               ],
             ),
           ],
@@ -201,7 +229,8 @@ class _HomePageState extends State<HomePage> {
                       Expense individualExpense =
                           selectedMonthExpenses[reversedIndex];
                       return MyListTile(
-                        title: individualExpense.name,
+                        title:
+                            "${individualExpense.name} - ${individualExpense.date.day}/${individualExpense.date.month}/${individualExpense.date.year}",
                         trailing: formatAmount(individualExpense.amount),
                         onEditPressed: (context) =>
                             openEditBox(individualExpense),
@@ -240,12 +269,13 @@ class _HomePageState extends State<HomePage> {
             id: DateTime.now().millisecondsSinceEpoch,
             name: nameController.text,
             amount: convertStringtoDouble(amountController.text),
-            date: DateTime.now(),
+            date: selectedDate, // ✅ Usa la fecha elegida
           );
           await context.read<ExpenseDatabase>().addExpense(expense);
           refreshData();
           nameController.clear();
           amountController.clear();
+          selectedDate = DateTime.now(); // ✅ Reiniciar para siguiente gasto
         }
       },
       child: const Text('Guardar'),
